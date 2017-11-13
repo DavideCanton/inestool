@@ -27,7 +27,7 @@ import logging
 import os
 import os.path
 import binascii
-from StringIO import StringIO
+from io import StringIO
 import collections
 from xml.etree import ElementTree
 import tempfile
@@ -67,13 +67,12 @@ class SkipROM(Exception):
 MIN_HEADER_READ_SIZE = 16
 
 
-def parse_header(header_bytes):
-    assert len(header_bytes) >= MIN_HEADER_READ_SIZE, len(header_bytes)
-    if header_bytes.startswith("UNIF"):
+def parse_header(header_ints):
+    assert len(header_ints) >= MIN_HEADER_READ_SIZE, len(header_ints)
+    if header_ints.startswith(b"UNIF"):
         raise SkipROM("UNIF currently unsupported")
-    if not header_bytes.startswith("NES\x1a"):
+    if not header_ints.startswith(b"NES\x1a"):
         return None
-    header_ints = [ord(byte) for byte in header_bytes]
     if header_ints[7] & 0xc == 8:
         raise SkipROM("NES 2.0 currently unsupported")
     if header_ints[6] & 4:
@@ -107,7 +106,7 @@ class IOHandler(object):
         header_bytes = file_obj.read(MIN_HEADER_READ_SIZE)
         try:
             rom_info = parse_header(header_bytes)
-        except SkipROM, ex:
+        except SkipROM as ex:
             logging.warn("%s: %s", name, ex)
             raise
         if rom_info:
@@ -204,7 +203,7 @@ class ZipIOHandler(WritableIOHandler):
                 except (zipfile.BadZipfile, zlib.error) as ex:
                     logging.warn("can't read %s within %s: %s", name,
                                  self._path, ex)
-                except SkipROM, ex:
+                except SkipROM as ex:
                     pass
 
     def update(self, requests):
@@ -224,7 +223,7 @@ class ZipIOHandler(WritableIOHandler):
                     new_zip_file.write(member_path, name, zipfile.ZIP_DEFLATED)
                     os.unlink(member_path)
             if requests_by_file:
-                print repr(requests)
+                print(repr(requests))
                 raise Exception("requests for unknown files: %s" %
                                 (", ".join(requests_by_file),))
             temp_file.close()
@@ -587,8 +586,8 @@ def cmd_read(args):
     file_info_line = "{file_info.name} ({file_info.crc32}):"
     template_lines = [file_info_line]
     max_label_len = max(len(label)
-                        for label in ROMInfo.FIELD_LABELS.itervalues())
-    for attr, label in ROMInfo.FIELD_LABELS.iteritems():
+                        for label in ROMInfo.FIELD_LABELS.values())
+    for attr, label in ROMInfo.FIELD_LABELS.items():
         template_lines.append("\t%-*s: {formatted_rom_values[%s]}" %
                               (max_label_len, label, attr))
     formatters = tuple((attr, ROMInfo.FIELD_FORMATTERS.get(attr, str))
@@ -600,10 +599,10 @@ def cmd_read(args):
                 attr: formatter(getattr(file_info.rom_info, attr))
                 for attr, formatter in formatters
             }
-            print template.format(file_info=file_info,
-                                  formatted_rom_values=formatted_rom_values)
+            print(template.format(file_info=file_info,
+                                  formatted_rom_values=formatted_rom_values))
         else:
-            print file_info_line.format(file_info=file_info), "no header"
+            print(file_info_line.format(file_info=file_info), "no header")
     visit_roms(args.roms, print_rom_info)
 
 
@@ -613,17 +612,17 @@ def cmd_write(args):
     def update_rom_header(file_info):
         db_rom_info = db.get(file_info.crc32)
         if not file_info.rom_info and not db_rom_info:
-            print file_info_line.format(
+            print(file_info_line.format(
                 "no header, not in database, cannot add header",
-                file_info=file_info)
+                file_info=file_info))
             return None
         elif not db_rom_info:
-            print file_info_line.format("not in database, skipping",
-                                        file_info=file_info)
+            print(file_info_line.format("not in database, skipping",
+                                        file_info=file_info))
             return None
         elif not file_info.rom_info:
-            print file_info_line.format("no header, will add header",
-                                        file_info=file_info)
+            print(file_info_line.format("no header, will add header",
+                                        file_info=file_info))
             if args.dry_run:
                 return None
             else:
@@ -632,17 +631,17 @@ def cmd_write(args):
                                      db_rom_info)
         diff = db_rom_info.diff(file_info.rom_info)
         if not diff:
-            print file_info_line.format("header matches database",
-                                        file_info=file_info)
+            print(file_info_line.format("header matches database",
+                                        file_info=file_info))
         else:
-            print file_info_line.format(
+            print((file_info_line.format(
                 "header differs from database, will update header",
-                file_info=file_info)
-            for attr, (db_val, header_val) in diff.iteritems():
+                file_info=file_info)))
+            for attr, (db_val, header_val) in diff.items():
                 formatter = ROMInfo.FIELD_FORMATTERS.get(attr, str)
-                print "\t%s: expected %s, read %s" % (
+                print("\t%s: expected %s, read %s" % (
                     ROMInfo.FIELD_LABELS[attr],
-                    formatter(db_val), formatter(header_val))
+                    formatter(db_val), formatter(header_val)))
             if args.dry_run:
                 return None
             else:
